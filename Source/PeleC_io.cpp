@@ -383,7 +383,7 @@ PeleC::thePlotFileType () const
     // Increment this whenever the writePlotFile() format changes.
     //
 #ifdef AMREX_USE_EB
-    static const std::string the_plot_file_type = no_eb_in_domain ? "HyperCLaw-V1.1" : "CartGrid-V2.0";
+    static const std::string the_plot_file_type = no_eb_in_domain ? "HyperCLaw-V1.1" : "HyperCLaw-V1.1";
 #else
     static const std::string the_plot_file_type = "HyperCLaw-V1.1";
 #endif

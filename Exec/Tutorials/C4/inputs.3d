@@ -25,7 +25,7 @@ pelec.eb_isothermal = 1
 eb_verbosity = 1
 eos_gamma = 1.4
 pelec.eb_small_vfrac = 0
-prob.T_init         = 900.0
+prob.T_init         = 300.0
 transport.const_conductivity = 2.7271624e+04
 
 # WHICH PHYSICS

@@ -26,7 +26,7 @@ pc_rst_int_e(
   const int allow_small_energy,
   const int allow_negative_energy,
   const int dual_energy_update_E_from_e,
-  const int /*verbose*/)
+  const int verbose)
 {
   if (allow_small_energy == 0) {
     const amrex::Real rhoInv = 1.0 / S(i, j, k, URHO);
@@ -48,9 +48,9 @@ pc_rst_int_e(
     const amrex::Real small_e = eos_state_e;
     if (eden < small_e) {
       if (S(i, j, k, UEINT) * rhoInv < small_e) {
-        const amrex::Real eos_state_T_loc =
+        const amrex::Real eos_state_T =
           amrex::max(S(i, j, k, UTEMP), SMALL_TEMP);
-        EOS::T2Ei(eos_state_T_loc, eos_state_ei);
+        EOS::T2Ei(eos_state_T, eos_state_ei);
         eos_state_e = 0.0;
         for (int sp = 0; sp < NUM_SPECIES; sp++) {
           eos_state_e += eos_state_massfrac[sp] * eos_state_ei[sp];
@@ -67,9 +67,9 @@ pc_rst_int_e(
         S(i, j, k, UEINT) = rho_eint;
       }
       if (S(i, j, k, UEINT) * rhoInv < small_e) {
-        const amrex::Real eos_state_T_loc =
+        const amrex::Real eos_state_T =
           amrex::max(S(i, j, k, UTEMP), SMALL_TEMP);
-        EOS::T2Ei(eos_state_T_loc, eos_state_ei);
+        EOS::T2Ei(eos_state_T, eos_state_ei);
         eos_state_e = 0.0;
         for (int sp = 0; sp < NUM_SPECIES; sp++) {
           eos_state_e += eos_state_massfrac[sp] * eos_state_ei[sp];
@@ -167,7 +167,7 @@ pc_rst_int_e(
 // -----------------------------------------------------------
 void
 read_binary(
-  const std::string& iname,
+  const std::string iname,
   const size_t nx,
   const size_t ny,
   const size_t nz,
@@ -184,7 +184,7 @@ read_binary(
     infile.read(reinterpret_cast<char*>(&data[i]), sizeof(data[i]));
   }
   infile.close();
-}
+};
 
 // -----------------------------------------------------------
 // Read a csv file
@@ -197,7 +197,7 @@ read_binary(
 // -----------------------------------------------------------
 void
 read_csv(
-  const std::string& iname,
+  const std::string iname,
   const size_t nx,
   const size_t ny,
   const size_t nz,
@@ -238,7 +238,7 @@ read_csv(
       cnt++;
     }
   }
-}
+};
 
 // -----------------------------------------------------------
 // Search for the closest index in an array to a given value
@@ -251,7 +251,7 @@ read_csv(
 // -----------------------------------------------------------
 AMREX_GPU_HOST_DEVICE
 void
-locate(const amrex::Real* xtable, const int n, const amrex::Real& x, int& idxlo)
+locate(const amrex::Real* xtable, const int n, amrex::Real& x, int& idxlo)
 {
   // If x is out of bounds, return boundary index
   if (x >= xtable[n - 1]) {
@@ -278,4 +278,4 @@ locate(const amrex::Real* xtable, const int n, const amrex::Real& x, int& idxlo)
       }
     }
   }
-}
+};

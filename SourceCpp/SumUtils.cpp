@@ -96,15 +96,15 @@ PeleC::volWgtSquaredSum(const std::string& name, amrex::Real time, bool local)
 }
 
 amrex::Real
-PeleC ::volWgtSquaredSumDiff(int comp, amrex::Real /*time*/, bool local)
+PeleC ::volWgtSquaredSumDiff(int comp, amrex::Real time, bool local)
 {
   // Calculate volume weighted sum of the square of the difference
   // between the old and new quantity
 
   amrex::Real sum = 0.0;
   // const amrex::Real* dx = geom.CellSize();
-  const amrex::MultiFab& S_old = get_old_data(State_Type);
-  const amrex::MultiFab& S_new = get_new_data(State_Type);
+  amrex::MultiFab& S_old = get_old_data(State_Type);
+  amrex::MultiFab& S_new = get_new_data(State_Type);
   amrex::MultiFab diff(grids, dmap, 1, 0);
 
   // Calculate the difference between the states

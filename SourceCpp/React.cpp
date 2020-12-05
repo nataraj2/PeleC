@@ -8,10 +8,7 @@
 
 void
 PeleC::react_state(
-  amrex::Real /*time*/,
-  amrex::Real dt,
-  bool react_init,
-  amrex::MultiFab* aux_src)
+  amrex::Real time, amrex::Real dt, bool react_init, amrex::MultiFab* aux_src)
 {
   /*
     Update I_R, and recompute S_new
@@ -47,6 +44,7 @@ PeleC::react_state(
 
   // only do this if we are not at the first step
   if (!react_init) {
+
     // Build non-reacting source term, and an S_new that does not include
     // reactions
     if (aux_src == nullptr) {
@@ -90,6 +88,7 @@ PeleC::react_state(
          ++mfi) {
 
       const amrex::Box& bx = mfi.growntilebox(ng);
+      const amrex::Box vbox = mfi.tilebox();
 
       // old state or the state at t=0
       auto const& sold_arr =
@@ -104,14 +103,16 @@ PeleC::react_state(
       // TODO: Update here? Or just get reaction source?
       const int do_update = react_init ? 0 : 1;
 
+      amrex::Real wt =
+        amrex::ParallelDescriptor::second(); // timing for each fab
 #ifdef PELEC_USE_EB
       const auto& flag_fab = flags[mfi];
       amrex::FabType typ = flag_fab.getType(bx);
       if (typ == amrex::FabType::covered) {
         if (do_react_load_balance) {
-          const amrex::Box vbox = mfi.tilebox();
+          wt = 0.0;
           get_new_data(Work_Estimate_Type)[mfi].plus<amrex::RunOn::Device>(
-            0.0, vbox);
+            wt, vbox);
         }
         continue;
       } else if (
@@ -119,6 +120,7 @@ PeleC::react_state(
 #endif
       {
         if (chem_integrator == 1) {
+
           // for rk64 we set minimum, maximum and guess
           // number of sub-iterations
           const int nsubsteps_min = adaptrk_nsubsteps_min;
@@ -136,9 +138,6 @@ PeleC::react_state(
             });
         } else if (chem_integrator == 2) {
 #ifdef USE_SUNDIALS_PP
-          amrex::Real wt =
-            amrex::ParallelDescriptor::second(); // timing for each fab
-
           const auto len = amrex::length(bx);
           const auto lo = amrex::lbound(bx);
           const int ncells = len.x * len.y * len.z;
@@ -322,7 +321,6 @@ PeleC::react_state(
           wt = (amrex::ParallelDescriptor::second() - wt) / bx.d_numPts();
 
           if (do_react_load_balance) {
-            const amrex::Box vbox = mfi.tilebox();
             get_new_data(Work_Estimate_Type)[mfi].plus<amrex::RunOn::Device>(
               wt, vbox);
           }
@@ -341,6 +339,7 @@ PeleC::react_state(
     S_new.FillBoundary(geom.periodicity());
 
   if (verbose > 1) {
+
     const int IOProc = amrex::ParallelDescriptor::IOProcessorNumber();
     amrex::Real run_time = amrex::ParallelDescriptor::second() - strt_time;
 

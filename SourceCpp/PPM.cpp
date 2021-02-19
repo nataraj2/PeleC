@@ -1,5 +1,6 @@
 #include "Godunov.H"
 #include "PPM.H"
+#include "WENO.H"
 
 void
 trace_ppm(
@@ -12,9 +13,10 @@ trace_ppm(
   const amrex::Box& vbx,
   const amrex::Real dt,
   const amrex::Real* dx,
-  const int use_flattening)
+  const int use_flattening,
+  const int use_hybrid_weno,
+  const int weno_scheme)
 {
-
   // here, lo and hi are the range we loop over -- this can include ghost cells
   // vlo and vhi are the bounds of the valid box (no ghost cells)
 
@@ -84,8 +86,9 @@ trace_ppm(
     // amrex::Real rho = q_arr(i, j, k, QRHO);
 
     amrex::Real massfrac[NUM_SPECIES];
-    for (int species = 0; species < NUM_SPECIES; ++species)
+    for (int species = 0; species < NUM_SPECIES; ++species) {
       massfrac[species] = q_arr(i, j, k, species + QFS);
+    }
 
     amrex::Real cc = 0;
     EOS::RPY2Cs(q_arr(i, j, k, QRHO), q_arr(i, j, k, QPRES), massfrac, cc);
@@ -94,48 +97,136 @@ trace_ppm(
 
     // do the parabolic reconstruction and compute the
     // integrals under the characteristic waves
-    amrex::Real s[5];
 
     amrex::Real flat = 1.0;
     // Calculate flattening in-place
     if (use_flattening == 1) {
       for (int dir_flat = 0; dir_flat < AMREX_SPACEDIM; dir_flat++) {
-        flat = amrex::min(flat, flatten(i, j, k, dir_flat, q_arr));
+        flat = amrex::min<amrex::Real>(flat, flatten(i, j, k, dir_flat, q_arr));
       }
     }
-
-    amrex::Real sm;
-    amrex::Real sp;
 
     amrex::Real Ip[QVAR][3];
     amrex::Real Im[QVAR][3];
 
     for (int n = 0; n < QVAR; n++) {
+      if (use_hybrid_weno && ((weno_scheme == 0) || (weno_scheme == 1))) {
 
-      if (idir == 0) {
-        s[im2] = q_arr(i - 2, j, k, n);
-        s[im1] = q_arr(i - 1, j, k, n);
-        s[i0] = q_arr(i, j, k, n);
-        s[ip1] = q_arr(i + 1, j, k, n);
-        s[ip2] = q_arr(i + 2, j, k, n);
+        amrex::Real s_weno5[5];
+        if (idir == 0) {
+          s_weno5[0] = q_arr(i - 2, j, k, n);
+          s_weno5[1] = q_arr(i - 1, j, k, n);
+          s_weno5[2] = q_arr(i, j, k, n);
+          s_weno5[3] = q_arr(i + 1, j, k, n);
+          s_weno5[4] = q_arr(i + 2, j, k, n);
+        } else if (idir == 1) {
+          s_weno5[0] = q_arr(i, j - 2, k, n);
+          s_weno5[1] = q_arr(i, j - 1, k, n);
+          s_weno5[2] = q_arr(i, j, k, n);
+          s_weno5[3] = q_arr(i, j + 1, k, n);
+          s_weno5[4] = q_arr(i, j + 2, k, n);
+        } else {
+          s_weno5[0] = q_arr(i, j, k - 2, n);
+          s_weno5[1] = q_arr(i, j, k - 1, n);
+          s_weno5[2] = q_arr(i, j, k, n);
+          s_weno5[3] = q_arr(i, j, k + 1, n);
+          s_weno5[4] = q_arr(i, j, k + 2, n);
+        }
 
-      } else if (idir == 1) {
-        s[im2] = q_arr(i, j - 2, k, n);
-        s[im1] = q_arr(i, j - 1, k, n);
-        s[i0] = q_arr(i, j, k, n);
-        s[ip1] = q_arr(i, j + 1, k, n);
-        s[ip2] = q_arr(i, j + 2, k, n);
+        amrex::Real sm = 0.0;
+        amrex::Real sp = 0.0;
+        if (weno_scheme == 0) {
+          weno_reconstruct_5js(s_weno5, sm, sp);
+        } else if (weno_scheme == 1) {
+          weno_reconstruct_5z(s_weno5, sm, sp);
+        }
+        ppm_int_profile(sm, sp, s_weno5[2], un, cc, dtdx, Ip[n], Im[n]);
 
+      } else if (use_hybrid_weno && weno_scheme == 2) {
+
+        amrex::Real s_weno7[7];
+        if (idir == 0) {
+          s_weno7[0] = q_arr(i - 3, j, k, n);
+          s_weno7[1] = q_arr(i - 2, j, k, n);
+          s_weno7[2] = q_arr(i - 1, j, k, n);
+          s_weno7[3] = q_arr(i, j, k, n);
+          s_weno7[4] = q_arr(i + 1, j, k, n);
+          s_weno7[5] = q_arr(i + 2, j, k, n);
+          s_weno7[6] = q_arr(i + 3, j, k, n);
+        } else if (idir == 1) {
+          s_weno7[0] = q_arr(i, j - 3, k, n);
+          s_weno7[1] = q_arr(i, j - 2, k, n);
+          s_weno7[2] = q_arr(i, j - 1, k, n);
+          s_weno7[3] = q_arr(i, j, k, n);
+          s_weno7[4] = q_arr(i, j + 1, k, n);
+          s_weno7[5] = q_arr(i, j + 2, k, n);
+          s_weno7[6] = q_arr(i, j + 3, k, n);
+        } else {
+          s_weno7[0] = q_arr(i, j, k - 3, n);
+          s_weno7[1] = q_arr(i, j, k - 2, n);
+          s_weno7[2] = q_arr(i, j, k - 1, n);
+          s_weno7[3] = q_arr(i, j, k, n);
+          s_weno7[4] = q_arr(i, j, k + 1, n);
+          s_weno7[5] = q_arr(i, j, k + 2, n);
+          s_weno7[6] = q_arr(i, j, k + 3, n);
+        }
+
+        amrex::Real sm;
+        amrex::Real sp;
+        weno_reconstruct_7z(s_weno7, sm, sp);
+        ppm_int_profile(sm, sp, s_weno7[3], un, cc, dtdx, Ip[n], Im[n]);
+
+      } else if (use_hybrid_weno && weno_scheme == 3) {
+
+        amrex::Real s_weno3[3];
+        if (idir == 0) {
+          s_weno3[0] = q_arr(i - 1, j, k, n);
+          s_weno3[1] = q_arr(i, j, k, n);
+          s_weno3[2] = q_arr(i + 1, j, k, n);
+        } else if (idir == 1) {
+          s_weno3[0] = q_arr(i, j - 1, k, n);
+          s_weno3[1] = q_arr(i, j, k, n);
+          s_weno3[2] = q_arr(i, j + 1, k, n);
+        } else {
+          s_weno3[0] = q_arr(i, j, k - 1, n);
+          s_weno3[1] = q_arr(i, j, k, n);
+          s_weno3[2] = q_arr(i, j, k + 1, n);
+        }
+
+        amrex::Real sm;
+        amrex::Real sp;
+        weno_reconstruct_3z(s_weno3, sm, sp);
+        ppm_int_profile(sm, sp, s_weno3[1], un, cc, dtdx, Ip[n], Im[n]);
+
+        // ORIGINAL PPM
       } else {
-        s[im2] = q_arr(i, j, k - 2, n);
-        s[im1] = q_arr(i, j, k - 1, n);
-        s[i0] = q_arr(i, j, k, n);
-        s[ip1] = q_arr(i, j, k + 1, n);
-        s[ip2] = q_arr(i, j, k + 2, n);
-      }
 
-      ppm_reconstruct(s, flat, sm, sp);
-      ppm_int_profile(sm, sp, s[i0], un, cc, dtdx, Ip[n], Im[n]);
+        amrex::Real s[5];
+        if (idir == 0) {
+          s[im2] = q_arr(i - 2, j, k, n);
+          s[im1] = q_arr(i - 1, j, k, n);
+          s[i0] = q_arr(i, j, k, n);
+          s[ip1] = q_arr(i + 1, j, k, n);
+          s[ip2] = q_arr(i + 2, j, k, n);
+        } else if (idir == 1) {
+          s[im2] = q_arr(i, j - 2, k, n);
+          s[im1] = q_arr(i, j - 1, k, n);
+          s[i0] = q_arr(i, j, k, n);
+          s[ip1] = q_arr(i, j + 1, k, n);
+          s[ip2] = q_arr(i, j + 2, k, n);
+        } else {
+          s[im2] = q_arr(i, j, k - 2, n);
+          s[im1] = q_arr(i, j, k - 1, n);
+          s[i0] = q_arr(i, j, k, n);
+          s[ip1] = q_arr(i, j, k + 1, n);
+          s[ip2] = q_arr(i, j, k + 2, n);
+        }
+
+        amrex::Real sm;
+        amrex::Real sp;
+        ppm_reconstruct(s, flat, sm, sp);
+        ppm_int_profile(sm, sp, s[2], un, cc, dtdx, Ip[n], Im[n]);
+      }
     }
 
     // PeleC does source term tracing in pc_transx, pc_transy, and
@@ -160,14 +251,12 @@ trace_ppm(
     //     s[i0] = srcQ(i, j, k, n);
     //     s[ip1] = srcQ(i + 1, j, k, n);
     //     s[ip2] = srcQ(i + 2, j, k, n);
-
     //   } else if (idir == 1) {
     //     s[im2] = srcQ(i, j - 2, k, n);
     //     s[im1] = srcQ(i, j - 1, k, n);
     //     s[i0] = srcQ(i, j, k, n);
     //     s[ip1] = srcQ(i, j + 1, k, n);
     //     s[ip2] = srcQ(i, j + 2, k, n);
-
     //   } else {
     //     s[im2] = srcQ(i, j, k - 2, n);
     //     s[im1] = srcQ(i, j, k - 1, n);
@@ -175,13 +264,11 @@ trace_ppm(
     //     s[ip1] = srcQ(i, j, k + 1, n);
     //     s[ip2] = srcQ(i, j, k + 2, n);
     //   }
-
     //   ppm_reconstruct(s, flat, sm, sp);
     //   ppm_int_profile(sm, sp, s[i0], un, cc, dtdx, Ip_src[n], Im_src[n]);
     // }
 
     for (int n = QFS; n < NUM_SPECIES + QFS; n++) {
-
       // Plus state on face i
       if (
         (idir == 0 && i >= vlo[0]) || (idir == 1 && j >= vlo[1]) ||
@@ -202,17 +289,14 @@ trace_ppm(
       // Minus state on face i+1
       if (idir == 0 && i <= vhi[0]) {
         qm(i + 1, j, k, n) = Ip[n][1];
-
       } else if (idir == 1 && j <= vhi[1]) {
         qm(i, j + 1, k, n) = Ip[n][1];
-
       } else if (idir == 2 && k <= vhi[2]) {
         qm(i, j, k + 1, n) = Ip[n][1];
       }
     }
 
     // plus state on face i
-
     if (
       (idir == 0 && i >= vlo[0]) || (idir == 1 && j >= vlo[1]) ||
       (idir == 2 && k >= vlo[2])) {
@@ -227,13 +311,16 @@ trace_ppm(
       amrex::Real p_ref = Im[QPRES][0];
       amrex::Real rhoe_g_ref = Im[QREINT][0];
 
-      rho_ref = amrex::max(rho_ref, SMALL_DENS);
+      rho_ref = amrex::max<amrex::Real>(
+        rho_ref, std::numeric_limits<amrex::Real>::min());
       amrex::Real rho_ref_inv = 1.0 / rho_ref;
-      p_ref = amrex::max(p_ref, SMALL_PRES);
+      p_ref =
+        amrex::max<amrex::Real>(p_ref, std::numeric_limits<amrex::Real>::min());
 
       amrex::Real massfrac_ref[NUM_SPECIES];
-      for (int species = 0; species < NUM_SPECIES; ++species)
+      for (int species = 0; species < NUM_SPECIES; ++species) {
         massfrac_ref[species] = Im[species + QFS][0];
+      }
 
       // For tracing
       amrex::Real cc_ref = 0;
@@ -281,13 +368,15 @@ trace_ppm(
       // The final interface states are just
       // q_s = q_ref - sum(l . dq) r
       // note that the a{mpz}right as defined above have the minus already
-      qp(i, j, k, QRHO) =
-        amrex::max(SMALL_DENS, rho_ref + alphap + alpham + alpha0r);
+      qp(i, j, k, QRHO) = amrex::max<amrex::Real>(
+        std::numeric_limits<amrex::Real>::min(),
+        rho_ref + alphap + alpham + alpha0r);
       qp(i, j, k, QUN) = un_ref + (alphap - alpham) * cc_ref * rho_ref_inv;
       // qp(i,j,k,QREINT) = rhoe_g_ref + (alphap + alpham)*h_g_ref +
       // alpha0e_g;
-      qp(i, j, k, QPRES) =
-        amrex::max(SMALL_PRES, p_ref + (alphap + alpham) * csq_ref);
+      qp(i, j, k, QPRES) = amrex::max<amrex::Real>(
+        std::numeric_limits<amrex::Real>::min(),
+        p_ref + (alphap + alpham) * csq_ref);
 
       // Transverse velocities -- there's no projection here, so we
       // don't need a reference state.  We only care about the state
@@ -302,14 +391,14 @@ trace_ppm(
       // This allows the (rho e) to take advantage of (pressure > small_pres)
       amrex::Real eint = 0;
       amrex::Real massfrac_p[NUM_SPECIES];
-      for (int species = 0; species < NUM_SPECIES; ++species)
+      for (int species = 0; species < NUM_SPECIES; ++species) {
         massfrac_p[species] = qp(i, j, k, species + QFS);
+      }
       EOS::RYP2E(qp(i, j, k, QRHO), massfrac_p, qp(i, j, k, QPRES), eint);
       qp(i, j, k, QREINT) = qp(i, j, k, QRHO) * eint;
     }
 
     // minus state on face i + 1
-
     if (
       (idir == 0 && i <= vhi[0]) || (idir == 1 && j <= vhi[1]) ||
       (idir == 2 && k <= vhi[2])) {
@@ -322,13 +411,16 @@ trace_ppm(
       amrex::Real p_ref = Ip[QPRES][2];
       amrex::Real rhoe_g_ref = Ip[QREINT][2];
 
-      rho_ref = amrex::max(rho_ref, SMALL_DENS);
+      rho_ref = amrex::max<amrex::Real>(
+        rho_ref, std::numeric_limits<amrex::Real>::min());
       amrex::Real rho_ref_inv = 1.0 / rho_ref;
-      p_ref = amrex::max(p_ref, SMALL_PRES);
+      p_ref =
+        amrex::max<amrex::Real>(p_ref, std::numeric_limits<amrex::Real>::min());
 
       amrex::Real massfrac_ref[NUM_SPECIES];
-      for (int species = 0; species < NUM_SPECIES; ++species)
+      for (int species = 0; species < NUM_SPECIES; ++species) {
         massfrac_ref[species] = Ip[species + QFS][2];
+      }
 
       // For tracing
       amrex::Real cc_ref = 0;
@@ -373,14 +465,16 @@ trace_ppm(
       // q_s = q_ref - sum (l . dq) r
       // note that the a{mpz}left as defined above have the minus already
       if (idir == 0) {
-        qm(i + 1, j, k, QRHO) =
-          amrex::max(SMALL_DENS, rho_ref + alphap + alpham + alpha0r);
+        qm(i + 1, j, k, QRHO) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          rho_ref + alphap + alpham + alpha0r);
         qm(i + 1, j, k, QUN) =
           un_ref + (alphap - alpham) * cc_ref * rho_ref_inv;
         // qm(i+1,j,k,QREINT) = rhoe_g_ref + (alphap + alpham)*h_g_ref +
         // alpha0e_g;
-        qm(i + 1, j, k, QPRES) =
-          amrex::max(SMALL_PRES, p_ref + (alphap + alpham) * csq_ref);
+        qm(i + 1, j, k, QPRES) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          p_ref + (alphap + alpham) * csq_ref);
 
         // transverse velocities
         qm(i + 1, j, k, QUT) = Ip[QUT][1] /*+ hdt * Ip_src[QUT][1]*/;
@@ -390,21 +484,24 @@ trace_ppm(
         // small_pres)
         amrex::Real eint = 0;
         amrex::Real massfrac_m[NUM_SPECIES];
-        for (int species = 0; species < NUM_SPECIES; ++species)
+        for (int species = 0; species < NUM_SPECIES; ++species) {
           massfrac_m[species] = qm(i + 1, j, k, species + QFS);
+        }
         EOS::RYP2E(
           qm(i + 1, j, k, QRHO), massfrac_m, qm(i + 1, j, k, QPRES), eint);
         qm(i + 1, j, k, QREINT) = qm(i + 1, j, k, QRHO) * eint;
 
       } else if (idir == 1) {
-        qm(i, j + 1, k, QRHO) =
-          amrex::max(SMALL_DENS, rho_ref + alphap + alpham + alpha0r);
+        qm(i, j + 1, k, QRHO) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          rho_ref + alphap + alpham + alpha0r);
         qm(i, j + 1, k, QUN) =
           un_ref + (alphap - alpham) * cc_ref * rho_ref_inv;
         // qm(i,j+1,k,QREINT) = rhoe_g_ref + (alphap + alpham)*h_g_ref +
         // alpha0e_g;
-        qm(i, j + 1, k, QPRES) =
-          amrex::max(SMALL_PRES, p_ref + (alphap + alpham) * csq_ref);
+        qm(i, j + 1, k, QPRES) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          p_ref + (alphap + alpham) * csq_ref);
 
         // transverse velocities
         qm(i, j + 1, k, QUT) = Ip[QUT][1] /*+ hdt * Ip_src[QUT][1]*/;
@@ -414,21 +511,24 @@ trace_ppm(
         // small_pres)
         amrex::Real eint = 0;
         amrex::Real massfrac_m[NUM_SPECIES];
-        for (int species = 0; species < NUM_SPECIES; ++species)
+        for (int species = 0; species < NUM_SPECIES; ++species) {
           massfrac_m[species] = qm(i, j + 1, k, species + QFS);
+        }
         EOS::RYP2E(
           qm(i, j + 1, k, QRHO), massfrac_m, qm(i, j + 1, k, QPRES), eint);
         qm(i, j + 1, k, QREINT) = qm(i, j + 1, k, QRHO) * eint;
 
       } else if (idir == 2) {
-        qm(i, j, k + 1, QRHO) =
-          amrex::max(SMALL_DENS, rho_ref + alphap + alpham + alpha0r);
+        qm(i, j, k + 1, QRHO) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          rho_ref + alphap + alpham + alpha0r);
         qm(i, j, k + 1, QUN) =
           un_ref + (alphap - alpham) * cc_ref * rho_ref_inv;
         // qm(i,j,k+1,QREINT) = rhoe_g_ref + (alphap + alpham)*h_g_ref +
         // alpha0e_g;
-        qm(i, j, k + 1, QPRES) =
-          amrex::max(SMALL_PRES, p_ref + (alphap + alpham) * csq_ref);
+        qm(i, j, k + 1, QPRES) = amrex::max<amrex::Real>(
+          std::numeric_limits<amrex::Real>::min(),
+          p_ref + (alphap + alpham) * csq_ref);
 
         // transverse velocities
         qm(i, j, k + 1, QUT) = Ip[QUT][1] /*+ hdt * Ip_src[QUT][1]*/;
@@ -438,8 +538,9 @@ trace_ppm(
         // small_pres)
         amrex::Real eint = 0;
         amrex::Real massfrac_m[NUM_SPECIES];
-        for (int species = 0; species < NUM_SPECIES; ++species)
+        for (int species = 0; species < NUM_SPECIES; ++species) {
           massfrac_m[species] = qm(i, j, k + 1, species + QFS);
+        }
         EOS::RYP2E(
           qm(i, j, k + 1, QRHO), massfrac_m, qm(i, j, k + 1, QPRES), eint);
         qm(i, j, k + 1, QREINT) = qm(i, j, k + 1, QRHO) * eint;

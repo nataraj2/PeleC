@@ -41,15 +41,15 @@ pc_compute_hyp_mol_flux(
     setV(cbox, QVAR, dq, 0.0);
 
     // dimensional indexing
-    const amrex::GpuArray<const int, 3> bdim{dir == 0, dir == 1, dir == 2};
+    const amrex::GpuArray<const int, 3> bdim{{dir == 0, dir == 1, dir == 2}};
     const amrex::GpuArray<const int, 3> q_idx{
-      bdim[0] * QU + bdim[1] * QV + bdim[2] * QW,
-      bdim[0] * QV + bdim[1] * QU + bdim[2] * QU,
-      bdim[0] * QW + bdim[1] * QW + bdim[2] * QV};
+      {bdim[0] * QU + bdim[1] * QV + bdim[2] * QW,
+       bdim[0] * QV + bdim[1] * QU + bdim[2] * QU,
+       bdim[0] * QW + bdim[1] * QW + bdim[2] * QV}};
     const amrex::GpuArray<const int, 3> f_idx{
-      bdim[0] * UMX + bdim[1] * UMY + bdim[2] * UMZ,
-      bdim[0] * UMY + bdim[1] * UMX + bdim[2] * UMX,
-      bdim[0] * UMZ + bdim[1] * UMZ + bdim[2] * UMY};
+      {bdim[0] * UMX + bdim[1] * UMY + bdim[2] * UMZ,
+       bdim[0] * UMY + bdim[1] * UMX + bdim[2] * UMX,
+       bdim[0] * UMZ + bdim[1] * UMZ + bdim[2] * UMY}};
 
     if (plm_iorder != 1) {
       amrex::ParallelFor(
@@ -118,11 +118,15 @@ pc_compute_hyp_mol_flux(
 
         const amrex::Real cavg =
           0.5 * (qaux(i, j, k, QC) + qaux(ii, jj, kk, QC));
-        const amrex::Real csmall =
-          amrex::min(qaux(i, j, k, QCSML), qaux(ii, jj, kk, QCSML));
+        const amrex::Real csmall = amrex::min<amrex::Real>(
+          qaux(i, j, k, QCSML), qaux(ii, jj, kk, QCSML));
 
-        amrex::Real eos_state_rho, eos_state_p, eos_state_e, eos_state_cs,
-          eos_state_gamma, eos_state_T;
+        amrex::Real eos_state_rho;
+        amrex::Real eos_state_p;
+        amrex::Real eos_state_e;
+        amrex::Real eos_state_cs;
+        amrex::Real eos_state_gamma;
+        amrex::Real eos_state_T;
 
         eos_state_rho = qtempl[R_RHO];
         eos_state_p = qtempl[R_P];
@@ -153,7 +157,11 @@ pc_compute_hyp_mol_flux(
         amrex::Real flux_tmp[NVAR] = {0.0};
         amrex::Real ustar = 0.0;
 
-        amrex::Real tmp0, tmp1, tmp2, tmp3, tmp4;
+        amrex::Real tmp0;
+        amrex::Real tmp1;
+        amrex::Real tmp2;
+        amrex::Real tmp3;
+        amrex::Real tmp4;
         riemann(
           qtempl[R_RHO], qtempl[R_UN], qtempl[R_UT1], qtempl[R_UT2],
           qtempl[R_P], rhoe_l, spl, gamc_l, qtempr[R_RHO], qtempr[R_UN],
@@ -201,23 +209,30 @@ pc_compute_hyp_mol_flux(
     const int k = ebg[L].iv[2];
     amrex::Real qtempl[5 + NUM_SPECIES] = {0.0};
     amrex::Real qtempr[5 + NUM_SPECIES] = {0.0};
-    amrex::Real cavg = 0.0, csmall = 0.0, /*cspeed = 0.0,*/ rhoe_l = 0.0,
-                gamc_l = 0.0;
+    amrex::Real cavg = 0.0;
+    amrex::Real csmall = 0.0;
+    amrex::Real /*cspeed = 0.0,*/ rhoe_l = 0.0;
+    amrex::Real gamc_l = 0.0;
     amrex::Real spl[NUM_SPECIES] = {0.0};
     amrex::Real flux_tmp[NVAR] = {0.0};
     amrex::Real ebnorm[AMREX_SPACEDIM] = {AMREX_D_DECL(
       ebg[L].eb_normal[0], ebg[L].eb_normal[1], ebg[L].eb_normal[2])};
     const amrex::Real ebnorm_mag = std::sqrt(
       ebnorm[0] * ebnorm[0] + ebnorm[1] * ebnorm[1] + ebnorm[2] * ebnorm[2]);
-    for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
-      ebnorm[dir] /= ebnorm_mag;
+    for (amrex::Real& dir : ebnorm) {
+      dir /= ebnorm_mag;
     }
     if (is_inside(i, j, k, lo, hi, nextra)) {
       if (vfrac(i, j, k) < captured_eb_small_vfrac) {
-        amrex::Real sum_kappa = 0.0, sum_nbrs_qc = 0.0, sum_nbrs_qcsmall = 0.0,
-                    sum_nbrs_qu = 0.0, sum_nbrs_qv = 0.0, sum_nbrs_qw = 0.0,
-                    sum_nbrs_qp = 0.0, sum_nbrs_qr = 0.0,
-                    sum_nbrs_sp[NUM_SPECIES] = {0.0};
+        amrex::Real sum_kappa = 0.0;
+        amrex::Real sum_nbrs_qc = 0.0;
+        amrex::Real sum_nbrs_qcsmall = 0.0;
+        amrex::Real sum_nbrs_qu = 0.0;
+        amrex::Real sum_nbrs_qv = 0.0;
+        amrex::Real sum_nbrs_qw = 0.0;
+        amrex::Real sum_nbrs_qp = 0.0;
+        amrex::Real sum_nbrs_qr = 0.0;
+        amrex::Real sum_nbrs_sp[NUM_SPECIES] = {0.0};
         for (int ii = -1; ii <= 1; ii++) {
 #if AMREX_SPACEDIM > 1
           for (int jj = -1; jj <= 1; jj++) {
@@ -226,7 +241,7 @@ pc_compute_hyp_mol_flux(
 #endif
 #endif
               int nbr = flags(i, j, k).isConnected(ii, jj, kk);
-              if ((ii == 0) and (jj == 0) and (kk == 0)) {
+              if ((ii == 0) && (jj == 0) && (kk == 0)) {
                 nbr = 0;
               }
               sum_kappa += nbr * vfrac(i + ii, j + jj, k + kk);
@@ -309,7 +324,12 @@ pc_compute_hyp_mol_flux(
     }
 
     if (is_inside(i, j, k, lo, hi, nextra - 1)) {
-      amrex::Real tmp0, tmp1, tmp2, tmp3, tmp4, ustar = 0.0;
+      amrex::Real tmp0;
+      amrex::Real tmp1;
+      amrex::Real tmp2;
+      amrex::Real tmp3;
+      amrex::Real tmp4;
+      amrex::Real ustar = 0.0;
       riemann(
         qtempl[R_RHO], qtempl[R_UN], qtempl[R_UT1], qtempl[R_UT2], qtempl[R_P],
         rhoe_l, spl, gamc_l, qtempl[R_RHO], qtempr[R_UN], qtempl[R_UT1],

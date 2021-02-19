@@ -28,7 +28,6 @@ int PeleC::add_ext_src = 0;
 int PeleC::add_forcing_src = 0;
 int PeleC::hybrid_hydro = 0;
 int PeleC::ppm_type = 0;
-int PeleC::weno_variant = 1;
 int PeleC::ppm_trace_sources = 0;
 int PeleC::ppm_temp_fix = 0;
 int PeleC::ppm_predict_gammae = 0;
@@ -94,11 +93,16 @@ amrex::Real PeleC::react_T_max = 1.e200;
 amrex::Real PeleC::react_rho_min = 0.0;
 amrex::Real PeleC::react_rho_max = 1.e200;
 int PeleC::disable_shock_burning = 0;
+#ifdef USE_SUNDIALS_PP
+int PeleC::chem_integrator = 2;
+#else
 int PeleC::chem_integrator = 1;
+#endif
 int PeleC::adaptrk_nsubsteps_min = 20;
 int PeleC::adaptrk_nsubsteps_max = 300;
 int PeleC::adaptrk_nsubsteps_guess = 50;
-amrex::Real PeleC::adaptrk_errtol = 1e-16;
+amrex::Real PeleC::adaptrk_errtol = 1e-12;
+int PeleC::clean_react_massfrac = 1;
 int PeleC::bndry_func_thread_safe = 1;
 #ifdef AMREX_DEBUG
 int PeleC::print_energy_diagnostics = 1;

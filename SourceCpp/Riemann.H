@@ -24,7 +24,7 @@ riemann(
   const amrex::Real spr[NUM_SPECIES],
   const amrex::Real gamcr,
   const int bc_test_val,
-  const amrex::Real csmall,
+  const amrex::Real /*csmall*/,
   const amrex::Real cav,
   amrex::Real& ustar,
   amrex::Real& uflx_rho,
@@ -39,7 +39,7 @@ riemann(
   amrex::Real& qint_gdpres,
   amrex::Real& qint_gdgame)
 {
-  const amrex::Real wsmall = SMALL_DENS * csmall;
+  const amrex::Real wsmall = std::numeric_limits<amrex::Real>::min();
 
   amrex::Real gdnv_state_rho = rl;
   amrex::Real gdnv_state_p = pl;
@@ -59,12 +59,13 @@ riemann(
   EOS::RPY2Cs(gdnv_state_rho, gdnv_state_p, gdnv_state_massfrac, gdnv_state_cs);
   // const amrex::Real csr = gdnv_state_cs;
 
-  const amrex::Real wl =
-    amrex::max(wsmall, std::sqrt(amrex::Math::abs(gamcl * pl * rl)));
-  const amrex::Real wr =
-    amrex::max(wsmall, std::sqrt(amrex::Math::abs(gamcr * pr * rr)));
-  const amrex::Real pstar = amrex::max(
-    SMALL_PRES, ((wr * pl + wl * pr) + wl * wr * (ul - ur)) / (wl + wr));
+  const amrex::Real wl = amrex::max<amrex::Real>(
+    wsmall, std::sqrt(amrex::Math::abs(gamcl * pl * rl)));
+  const amrex::Real wr = amrex::max<amrex::Real>(
+    wsmall, std::sqrt(amrex::Math::abs(gamcr * pr * rr)));
+  const amrex::Real pstar = amrex::max<amrex::Real>(
+    std::numeric_limits<amrex::Real>::min(),
+    ((wr * pl + wl * pr) + wl * wr * (ul - ur)) / (wl + wr));
   ustar = ((wl * ul + wr * ur) + (pl - pr)) / (wl + wr);
 
   bool mask = ustar > 0.0;
@@ -76,9 +77,10 @@ riemann(
     sp[n] = mask ? spl[n] : spr[n];
   }
 
-  mask = amrex::Math::abs(ustar) <
-           SMALLU * 0.5 * (amrex::Math::abs(ul) + amrex::Math::abs(ur)) ||
-         ustar == 0.0;
+  mask =
+    amrex::Math::abs(ustar) < constants::smallu() * 0.5 *
+                                (amrex::Math::abs(ul) + amrex::Math::abs(ur)) ||
+    ustar == 0.0;
   ustar = mask ? 0.0 : ustar;
   ro = mask ? 0.5 * (rl + rr) : ro;
   uo = mask ? 0.5 * (ul + ur) : uo;
@@ -99,7 +101,8 @@ riemann(
   const amrex::Real co = gdnv_state_cs;
 
   const amrex::Real drho = (pstar - po) / (co * co);
-  const amrex::Real rstar = amrex::max(SMALL_DENS, ro + drho);
+  const amrex::Real rstar =
+    amrex::max<amrex::Real>(std::numeric_limits<amrex::Real>::min(), ro + drho);
 
   gdnv_state_rho = rstar;
   gdnv_state_p = pstar;
@@ -121,9 +124,10 @@ riemann(
   spout = mask ? spout : ushock;
   spin = mask ? spin : ushock;
 
-  const amrex::Real scr = (spout == spin) ? SMALL * cav : spout - spin;
-  const amrex::Real frac =
-    amrex::max(0.0, amrex::min(1.0, (1.0 + (spout + spin) / scr) * 0.5));
+  const amrex::Real scr =
+    (spout == spin) ? constants::small_num() * cav : spout - spin;
+  const amrex::Real frac = amrex::max<amrex::Real>(
+    0.0, amrex::min<amrex::Real>(1.0, (1.0 + (spout + spin) / scr) * 0.5));
 
   mask = ustar > 0.0;
   qint_iv1 = mask ? vl : vr;

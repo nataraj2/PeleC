@@ -91,11 +91,9 @@ PeleC::construct_new_les_source(
   getLESTerm(time, dt, *new_sources[les_src], flux_factor_new);
 }
 
-/**
- * Calculate the LES term by calling an SFS model
- * Across all conserved state components, compute the LES "source term"
- *    = -Div(LESFlux).
- **/
+// Calculate the LES term by calling an SFS model
+// Across all conserved state components, compute the LES "source term"
+//    = -Div(LESFlux).
 void
 PeleC::getLESTerm(
   amrex::Real time,
@@ -173,9 +171,7 @@ PeleC::getLESTerm(
   }
 }
 
-/**
- * Calculate the LES term using the Smagorinsky SFS model
- **/
+// Calculate the LES term using the Smagorinsky SFS model
 void
 PeleC::getSmagorinskyLESTerm(
   amrex::Real time,
@@ -192,7 +188,7 @@ PeleC::getSmagorinskyLESTerm(
     dx1 *= dx[dir];
   }
   const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dxD = {
-    D_DECL(dx1, dx1, dx1)};
+    {AMREX_D_DECL(dx1, dx1, dx1)}};
   const amrex::Real* dxDp = &(dxD[0]);
 
   amrex::MultiFab S(grids, dmap, NVAR, ngrow);
@@ -231,7 +227,8 @@ PeleC::getSmagorinskyLESTerm(
 
       auto const& s = S.array(mfi);
       int nqaux = NQAUX > 0 ? NQAUX : 1;
-      amrex::FArrayBox q(gbox, QVAR), qaux(gbox, nqaux);
+      amrex::FArrayBox q(gbox, QVAR);
+      amrex::FArrayBox qaux(gbox, nqaux);
       amrex::Elixir qeli = q.elixir();
       amrex::Elixir qauxeli = qaux.elixir();
       auto const& q_ar = q.array();
@@ -241,9 +238,10 @@ PeleC::getSmagorinskyLESTerm(
       // required for L term
       {
         BL_PROFILE("PeleC::ctoprim()");
+        PassMap const* lpmap = pass_map.get();
         amrex::ParallelFor(
           gbox, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-            pc_ctoprim(i, j, k, s, q_ar, qauxar);
+            pc_ctoprim(i, j, k, s, q_ar, qauxar, *lpmap);
           });
       }
 
@@ -256,7 +254,8 @@ PeleC::getSmagorinskyLESTerm(
       amrex::GpuArray<amrex::Array4<amrex::Real>, AMREX_SPACEDIM> tanders;
       {
         BL_PROFILE("PeleC::pc_compute_tangential_vel_derivs()");
-        amrex::Real d1, d2;
+        amrex::Real d1;
+        amrex::Real d2;
         for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
           tander_ec[dir].resize(eboxes[dir], GradUtils::nCompTan);
           tander_eli[dir] = tander_ec[dir].elixir();
@@ -285,8 +284,8 @@ PeleC::getSmagorinskyLESTerm(
       amrex::Elixir flux_eli[AMREX_SPACEDIM];
       const amrex::GpuArray<
         const amrex::Array4<const amrex::Real>, AMREX_SPACEDIM>
-        a{AMREX_D_DECL(
-          area[0].array(mfi), area[1].array(mfi), area[2].array(mfi))};
+        a{{AMREX_D_DECL(
+          area[0].array(mfi), area[1].array(mfi), area[2].array(mfi))}};
       amrex::GpuArray<amrex::Array4<amrex::Real>, AMREX_SPACEDIM> flx;
       for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
         flux_ec[dir].resize(eboxes[dir], NVAR);
@@ -297,14 +296,14 @@ PeleC::getSmagorinskyLESTerm(
       {
         BL_PROFILE("PeleC::pc_smagorinsky_sfs_term()");
         for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
-          amrex::Real Cs = PeleC::Cs;
-          amrex::Real CI = PeleC::CI;
-          amrex::Real PrT = PeleC::PrT;
+          amrex::Real Cs_local = PeleC::Cs;
+          amrex::Real CI_local = PeleC::CI;
+          amrex::Real PrT_local = PeleC::PrT;
           amrex::ParallelFor(
             eboxes[dir], [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
               pc_smagorinsky_sfs_term(
-                i, j, k, q_ar, tanders[dir], a[dir], dx[dir], dir, Cs, CI, PrT,
-                flx[dir]);
+                i, j, k, q_ar, tanders[dir], a[dir], dx[dir], dir, Cs_local,
+                CI_local, PrT_local, flx[dir]);
             });
         }
       }
@@ -340,13 +339,13 @@ PeleC::getSmagorinskyLESTerm(
 
         if (level < parent->finestLevel()) {
           getFluxReg(level + 1).CrseAdd(
-            mfi, {AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}, dxDp,
+            mfi, {{AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}}, dxDp,
             dt, device);
         }
 
         if (level > 0) {
           getFluxReg(level).FineAdd(
-            mfi, {AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}, dxDp,
+            mfi, {{AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}}, dxDp,
             dt, device);
         }
       }
@@ -357,9 +356,7 @@ PeleC::getSmagorinskyLESTerm(
 #endif // End of AMREX_SPACEDIM == 3
 }
 
-/**
- * Calculate the LES term using the dynamic Smagorinsky SFS model
- **/
+// Calculate the LES term using the dynamic Smagorinsky SFS model
 void
 PeleC::getDynamicSmagorinskyLESTerm(
   amrex::Real time,
@@ -405,7 +402,7 @@ PeleC::getDynamicSmagorinskyLESTerm(
     dx1 *= dx[dir];
   }
   const amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dxD = {
-    D_DECL(dx1, dx1, dx1)};
+    {AMREX_D_DECL(dx1, dx1, dx1)}};
   const amrex::Real* dxDp = &(dxD[0]);
 
   // 1. Get state variable data
@@ -453,7 +450,8 @@ PeleC::getDynamicSmagorinskyLESTerm(
 
       auto const& s = S.array(mfi);
       int nqaux = NQAUX > 0 ? NQAUX : 1;
-      amrex::FArrayBox q(g0box, QVAR), qaux(g0box, nqaux);
+      amrex::FArrayBox q(g0box, QVAR);
+      amrex::FArrayBox qaux(g0box, nqaux);
       amrex::Elixir qeli = q.elixir();
       amrex::Elixir qauxeli = qaux.elixir();
       auto const& q_ar = q.array();
@@ -463,9 +461,10 @@ PeleC::getDynamicSmagorinskyLESTerm(
       // required for L term
       {
         BL_PROFILE("PeleC::ctoprim()");
+        PassMap const* lpmap = pass_map.get();
         amrex::ParallelFor(
           g0box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-            pc_ctoprim(i, j, k, s, q_ar, qauxar);
+            pc_ctoprim(i, j, k, s, q_ar, qauxar, *lpmap);
           });
       }
 
@@ -474,7 +473,11 @@ PeleC::getDynamicSmagorinskyLESTerm(
       // them at the test filter level. All are located at cell centers.
       const int upper_triangle_n =
         static_cast<int>(0.5 * AMREX_SPACEDIM * (AMREX_SPACEDIM + 1));
-      amrex::FArrayBox K, RUT, alphaij, alpha, flux_T;
+      amrex::FArrayBox K;
+      amrex::FArrayBox RUT;
+      amrex::FArrayBox alphaij;
+      amrex::FArrayBox alpha;
+      amrex::FArrayBox flux_T;
       K.resize(g1box, upper_triangle_n);
       RUT.resize(g1box, AMREX_SPACEDIM);
       alphaij.resize(g1box, AMREX_SPACEDIM * AMREX_SPACEDIM);
@@ -492,20 +495,26 @@ PeleC::getDynamicSmagorinskyLESTerm(
       auto const& alpha_ar = alpha.array();
       auto const& flux_T_ar = flux_T.array();
       {
-        const int les_filter_fgr = PeleC::les_filter_fgr;
+        const int les_filter_fgr_local = PeleC::les_filter_fgr;
         BL_PROFILE("PeleC::pc_smagorinsky_sfs_term()");
         amrex::ParallelFor(
           g1box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
             pc_dynamic_smagorinsky_quantities(
-              i, j, k, q_ar, les_filter_fgr, dx, K_ar, RUT_ar, alphaij_ar,
+              i, j, k, q_ar, les_filter_fgr_local, dx, K_ar, RUT_ar, alphaij_ar,
               alpha_ar, flux_T_ar);
           });
       }
 
       // 3. Filter the state variables and the derived quantities at the
       // test filter level - still at cell centers
-      amrex::FArrayBox filtered_S, filtered_Q, filtered_Qaux, filtered_K,
-        filtered_RUT, filtered_alphaij, filtered_alpha, filtered_flux_T;
+      amrex::FArrayBox filtered_S;
+      amrex::FArrayBox filtered_Q;
+      amrex::FArrayBox filtered_Qaux;
+      amrex::FArrayBox filtered_K;
+      amrex::FArrayBox filtered_RUT;
+      amrex::FArrayBox filtered_alphaij;
+      amrex::FArrayBox filtered_alpha;
+      amrex::FArrayBox filtered_flux_T;
       filtered_S.resize(g2box, NVAR);
       filtered_Q.resize(g2box, QVAR);
       filtered_Qaux.resize(g2box, NQAUX > 0 ? NQAUX : 1);
@@ -531,9 +540,11 @@ PeleC::getDynamicSmagorinskyLESTerm(
       test_filter.apply_filter(g2box, Sfab, filtered_S);
       {
         BL_PROFILE("PeleC::ctoprim()");
+        PassMap const* lpmap = pass_map.get();
         amrex::ParallelFor(
           g2box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
-            pc_ctoprim(i, j, k, filtered_S_ar, filtered_Q_ar, filtered_Qaux_ar);
+            pc_ctoprim(
+              i, j, k, filtered_S_ar, filtered_Q_ar, filtered_Qaux_ar, *lpmap);
           });
       }
       test_filter.apply_filter(g3box, K, filtered_K);
@@ -555,14 +566,14 @@ PeleC::getDynamicSmagorinskyLESTerm(
       auto const& filtered_alpha_ar = filtered_alpha.array();
       auto const& filtered_flux_T_ar = filtered_flux_T.array();
       {
-        const int les_test_filter_fgr = PeleC::les_test_filter_fgr;
+        const int les_test_filter_fgr_local = PeleC::les_test_filter_fgr;
         BL_PROFILE("PeleC::pc_dynamic_smagorinsky_coeffs()");
         amrex::ParallelFor(
           g3box, [=] AMREX_GPU_DEVICE(int i, int j, int k) noexcept {
             pc_dynamic_smagorinsky_coeffs(
-              i, j, k, filtered_Q_ar, les_test_filter_fgr, dx, filtered_K_ar,
-              filtered_RUT_ar, filtered_alphaij_ar, filtered_alpha_ar,
-              filtered_flux_T_ar, coeff_cc_ar);
+              i, j, k, filtered_Q_ar, les_test_filter_fgr_local, dx,
+              filtered_K_ar, filtered_RUT_ar, filtered_alphaij_ar,
+              filtered_alpha_ar, filtered_flux_T_ar, coeff_cc_ar);
           });
       }
 
@@ -577,11 +588,14 @@ PeleC::getDynamicSmagorinskyLESTerm(
       const amrex::Box eboxes[AMREX_SPACEDIM] = {AMREX_D_DECL(
         amrex::surroundingNodes(cbox, 0), amrex::surroundingNodes(cbox, 1),
         amrex::surroundingNodes(cbox, 2))};
-      amrex::FArrayBox coeff_ec[AMREX_SPACEDIM], alphaij_ec[AMREX_SPACEDIM],
-        alpha_ec[AMREX_SPACEDIM], flux_T_ec[AMREX_SPACEDIM];
-      amrex::Elixir coeff_ec_eli[AMREX_SPACEDIM],
-        alphaij_ec_eli[AMREX_SPACEDIM], alpha_ec_eli[AMREX_SPACEDIM],
-        flux_T_ec_eli[AMREX_SPACEDIM];
+      amrex::FArrayBox coeff_ec[AMREX_SPACEDIM];
+      amrex::FArrayBox alphaij_ec[AMREX_SPACEDIM];
+      amrex::FArrayBox alpha_ec[AMREX_SPACEDIM];
+      amrex::FArrayBox flux_T_ec[AMREX_SPACEDIM];
+      amrex::Elixir coeff_ec_eli[AMREX_SPACEDIM];
+      amrex::Elixir alphaij_ec_eli[AMREX_SPACEDIM];
+      amrex::Elixir alpha_ec_eli[AMREX_SPACEDIM];
+      amrex::Elixir flux_T_ec_eli[AMREX_SPACEDIM];
       amrex::GpuArray<amrex::Array4<amrex::Real>, AMREX_SPACEDIM> coeff_ec_arr;
       amrex::GpuArray<amrex::Array4<amrex::Real>, AMREX_SPACEDIM>
         alphaij_ec_arr;
@@ -636,8 +650,8 @@ PeleC::getDynamicSmagorinskyLESTerm(
       amrex::Elixir flux_eli[AMREX_SPACEDIM];
       const amrex::GpuArray<
         const amrex::Array4<const amrex::Real>, AMREX_SPACEDIM>
-        a{AMREX_D_DECL(
-          area[0].array(mfi), area[1].array(mfi), area[2].array(mfi))};
+        a{{AMREX_D_DECL(
+          area[0].array(mfi), area[1].array(mfi), area[2].array(mfi))}};
       amrex::GpuArray<amrex::Array4<amrex::Real>, AMREX_SPACEDIM> flx;
       for (int dir = 0; dir < AMREX_SPACEDIM; dir++) {
         flux_ec[dir].resize(eboxes[dir], NVAR);
@@ -688,18 +702,18 @@ PeleC::getDynamicSmagorinskyLESTerm(
 
         if (level < parent->finestLevel()) {
           getFluxReg(level + 1).CrseAdd(
-            mfi, {AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}, dxDp,
+            mfi, {{AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}}, dxDp,
             dt, device);
         }
 
         if (level > 0) {
           getFluxReg(level).FineAdd(
-            mfi, {AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}, dxDp,
+            mfi, {{AMREX_D_DECL(&flux_ec[0], &flux_ec[1], &flux_ec[2])}}, dxDp,
             dt, device);
         }
       }
-    } // End of MFIter scope
-  }   // End of OMP scope
+    }
+  }
 #else
   amrex::Abort("LES only implemented in 3D for now");
 #endif // End of AMREX_SPACEDIM == 3

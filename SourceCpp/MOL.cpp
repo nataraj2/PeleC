@@ -307,7 +307,22 @@ pc_compute_hyp_mol_flux(
 
         // Flip the velocity about the normal for the right state - will use
         // left  state for remainder of right state
-        qtempr[R_UN] = -1.0 * qtempl[R_UN];
+
+        double ycen = 0.0 + (j+0.5)*0.0078125;
+	double vx = 300.0*cos(3.14150/4.0);
+	double vy = 300.0*sin(3.14150/4.0);
+	if(ycen > 0.2 and ycen < 0.25){
+		double vn = vx*(-ebnorm[0])+vy*(-ebnorm[1]);
+		qtempr[R_UN] = 2.0*vn - qtempl[R_UN];
+	}
+	else if(ycen > 0.4 and ycen < 0.45){
+		double vn = vx*(-ebnorm[0])+vy*(-ebnorm[1]);
+		qtempr[R_UN] = 2.0*vn - qtempl[R_UN];
+	}
+
+	else{
+        	qtempr[R_UN] = -1.0 * qtempl[R_UN];
+	}
       }
 
       amrex::Real eos_state_rho = qtempl[R_RHO];

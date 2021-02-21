@@ -816,18 +816,18 @@ initialize_EB2(
 
 	amrex::Real cyl_cent_x = 30.0;
 	amrex::Real cyl_cent_y = 20.0;
-	amrex::Real cyl_rad = 15.0;
+	amrex::Real cyl_rad = 15.1;
 
 	amrex::Real pipe1_lo_x = cyl_cent_x;
 	amrex::Real pipe1_lo_y = cyl_cent_y-cyl_rad;
 
-	amrex::Real pipe3_thickness = 5.0;
+	amrex::Real pipe3_thickness = 0.46*3;
 		
 	amrex::EB2::BoxIF pipe1(
-	{cyl_cent_x, cyl_cent_y-cyl_rad, -20.}, {85.0, cyl_cent_y+cyl_rad, 20.}, true);
+	{cyl_cent_x, cyl_cent_y-cyl_rad, -20.}, {85.0, cyl_cent_y+cyl_rad+0.15625, 20.}, true);
 
 	amrex::EB2::BoxIF pipe2(
-	{78.0, cyl_cent_y, -20.}, {85.0, cyl_cent_y+cyl_rad, 20.}, false);
+	{78.365, cyl_cent_y, -20.}, {85.0, cyl_cent_y+cyl_rad, 20.}, false);
 
 	amrex::EB2::CylinderIF cf1(cyl_rad,100.0, 2, {cyl_cent_x, cyl_cent_y, 0.0}, true);
 
@@ -838,7 +838,12 @@ initialize_EB2(
 
 
 	auto polys1 = amrex::EB2::makeUnion(polys,pipe2,pipe3);
+
+	//amrex::EB2::BoxIF pipe_test(
+        //{-10, cyl_cent_y-cyl_rad, -20.}, {78.0, cyl_cent_y+cyl_rad, 20.}, true);
+
 	auto gshop = amrex::EB2::makeShop(polys1);
+	//auto gshop = amrex::EB2::makeShop(pipe_test);
 
     	amrex::EB2::Build(gshop, geom, max_coarsening_level, max_coarsening_level, 4, false);
     }

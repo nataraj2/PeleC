@@ -308,10 +308,10 @@ pc_compute_hyp_mol_flux(
 
         // Flip the velocity about the normal for the right state - will use
         // left  state for remainder of right state
-	double xcen = 0.0 + (i+0.5)*0.3125*4;
-	double vx = -30000.0;
+	double xcen = 0.0 + (i+0.5)*0.15625*2;
+	double vx = -5000.0;
 
-	if(fabs(-ebnorm[0]-1.0) <1e-5 and xcen > 77.0){
+	if(xcen > 77.0 and fabs(-ebnorm[0]) > 1e-10){
 		double vn = vx*(-ebnorm[0]);
 		qtempr[R_UN] = 2.0*vn - qtempl[R_UN];
 	}

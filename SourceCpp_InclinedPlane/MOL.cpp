@@ -289,7 +289,6 @@ pc_compute_hyp_mol_flux(
         // left state for remainder of right state
         qtempr[R_UN] = -1.0 * qtempl[R_UN];
 
-
       } else {
         // Assume left state is the cell centered state - normal velocity
         qtempl[R_UN] =
@@ -308,15 +307,21 @@ pc_compute_hyp_mol_flux(
 
         // Flip the velocity about the normal for the right state - will use
         // left  state for remainder of right state
-	double xcen = 0.0 + (i+0.5)*0.3125*4;
-	double vx = -30000.0;
 
-	if(fabs(-ebnorm[0]-1.0) <1e-5 and xcen > 77.0){
-		double vn = vx*(-ebnorm[0]);
+        double ycen = 0.0 + (j+0.5)*0.0078125;
+	double vx = 30000.0*cos(3.14150/4.0);
+	double vy = 30000.0*sin(3.14150/4.0);
+	if(ycen > 20.0 and ycen < 25.0){
+		double vn = vx*(-ebnorm[0])+vy*(-ebnorm[1]);
 		qtempr[R_UN] = 2.0*vn - qtempl[R_UN];
 	}
+	else if(ycen > 40.0 and ycen < 45.0){
+		double vn = vx*(-ebnorm[0])+vy*(-ebnorm[1]);
+		qtempr[R_UN] = 2.0*vn - qtempl[R_UN];
+	}
+
 	else{
-        qtempr[R_UN] = -1.0 * qtempl[R_UN];
+        	qtempr[R_UN] = -1.0 * qtempl[R_UN];
 	}
       }
 

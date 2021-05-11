@@ -18,12 +18,14 @@ function(build_pelec_exe pelec_exe_name)
   set(PELE_PHYSICS_SRC_DIR ${CMAKE_SOURCE_DIR}/Submodules/PelePhysics)
   set(PELE_PHYSICS_BIN_DIR ${CMAKE_BINARY_DIR}/Submodules/PelePhysics/${pelec_exe_name})
 
-  set(SRC_DIR ${CMAKE_SOURCE_DIR}/SourceCpp)
-  set(BIN_DIR ${CMAKE_BINARY_DIR}/SourceCpp/${pelec_exe_name})
+  set(SRC_DIR ${CMAKE_SOURCE_DIR}/Source)
+  set(BIN_DIR ${CMAKE_BINARY_DIR}/Source/${pelec_exe_name})
 
   include(SetPeleCCompileFlags)
 
   add_subdirectory(${SRC_DIR}/Params ${BIN_DIR}/Params/${pelec_exe_name})
+
+  target_include_directories(${pelec_exe_name} SYSTEM PRIVATE "${PELE_PHYSICS_SRC_DIR}/Source")
 
   set(PELEC_TRANSPORT_DIR "${PELE_PHYSICS_SRC_DIR}/Transport/${PELEC_TRANSPORT_MODEL}")
   target_sources(${pelec_exe_name} PRIVATE
@@ -31,12 +33,21 @@ function(build_pelec_exe pelec_exe_name)
                  ${PELEC_TRANSPORT_DIR}/Transport.cpp
                  ${PELEC_TRANSPORT_DIR}/TransportParams.H)
   target_include_directories(${pelec_exe_name} SYSTEM PRIVATE ${PELEC_TRANSPORT_DIR})
+  if("${PELEC_TRANSPORT_MODEL}" STREQUAL "Simple") # FIXME mhdf better way?
+    target_compile_definitions(${pelec_exe_name} PRIVATE PELEC_USE_SIMPLE)
+  endif()
 
   set(PELEC_EOS_DIR "${PELE_PHYSICS_SRC_DIR}/Eos/${PELEC_EOS_MODEL}")
   target_sources(${pelec_exe_name} PRIVATE
                  ${PELEC_EOS_DIR}/EOS.cpp
                  ${PELEC_EOS_DIR}/EOS.H)
   target_include_directories(${pelec_exe_name} SYSTEM PRIVATE ${PELEC_EOS_DIR})
+  if("${PELEC_EOS_MODEL}" STREQUAL "Fuego") # FIXME mhdf better way?
+    target_compile_definitions(${pelec_exe_name} PRIVATE PELEC_USE_FUEGO)
+  endif()
+  if("${PELEC_EOS_MODEL}" STREQUAL "Soave-Redlich-Kwong") # FIXME mhdf better way?
+    target_compile_definitions(${pelec_exe_name} PRIVATE PELEC_USE_SRK)
+  endif()
 
   set(PELEC_MECHANISM_DIR "${PELE_PHYSICS_SRC_DIR}/Support/Fuego/Mechanism/Models/${PELEC_CHEMISTRY_MODEL}")
   target_sources(${pelec_exe_name} PRIVATE
@@ -118,6 +129,11 @@ function(build_pelec_exe pelec_exe_name)
   
   target_sources(${pelec_exe_name}
      PRIVATE
+       ${SRC_DIR}/Redistribution/iamr_create_itracker_${PELEC_DIM}d.cpp
+       ${SRC_DIR}/Redistribution/iamr_merge_redistribute.cpp
+       ${SRC_DIR}/Redistribution/iamr_redistribution.H
+       ${SRC_DIR}/Redistribution/iamr_redistribution.cpp
+       ${SRC_DIR}/Redistribution/iamr_state_redistribute.cpp
        ${SRC_DIR}/Advance.cpp
        ${SRC_DIR}/BCfill.cpp
        ${SRC_DIR}/Bld.cpp
@@ -165,6 +181,7 @@ function(build_pelec_exe pelec_exe_name)
        ${SRC_DIR}/Timestep.H
        ${SRC_DIR}/Utilities.H
        ${SRC_DIR}/Utilities.cpp
+       ${SRC_DIR}/WENO.H
   )
 
   if(NOT "${pelec_exe_name}" STREQUAL "PeleC-UnitTests")
@@ -193,6 +210,7 @@ function(build_pelec_exe pelec_exe_name)
 
   #PeleC include directories
   target_include_directories(${pelec_exe_name} PRIVATE ${SRC_DIR})
+  target_include_directories(${pelec_exe_name} PRIVATE ${SRC_DIR}/Redistribution)
   target_include_directories(${pelec_exe_name} PRIVATE ${CMAKE_BINARY_DIR})
 
   #Link to amrex library

@@ -22,8 +22,12 @@ PeleC::init_eb(
   const amrex::BoxArray& /*ba*/,
   const amrex::DistributionMapping& /*dm*/)
 {
-
-  eb_in_domain = ebInDomain();
+  amrex::ParmParse pp("eb2");
+  std::string geom_type("all_regular");
+  pp.query("geom_type", geom_type);
+  if (geom_type != "all_regular") {
+    eb_in_domain = true;
+  }
 
   // Build the geometry information; this is done for each new set of grids
   initialize_eb2_structs();
@@ -50,6 +54,7 @@ PeleC::initialize_eb2_structs()
     std::is_standard_layout<EBBndryGeom>::value,
     "EBBndryGeom is not standard layout");
 
+  const amrex::MultiFab* volfrac;
   const amrex::MultiCutFab* bndrycent;
   std::array<const amrex::MultiCutFab*, AMREX_SPACEDIM> eb2areafrac;
   std::array<const amrex::MultiCutFab*, AMREX_SPACEDIM> facecent;
@@ -58,12 +63,12 @@ PeleC::initialize_eb2_structs()
     dynamic_cast<amrex::EBFArrayBoxFactory const&>(Factory());
 
   // These are the data sources
-  vfrac.clear();
-  vfrac.define(grids, dmap, 1, numGrow(), amrex::MFInfo(), Factory());
-  amrex::MultiFab::Copy(vfrac, ebfactory.getVolFrac(), 0, 0, 1, numGrow());
+  volfrac = &(ebfactory.getVolFrac());
   bndrycent = &(ebfactory.getBndryCent());
   eb2areafrac = ebfactory.getAreaFrac();
   facecent = ebfactory.getFaceCent();
+
+  vfrac.copy(*volfrac);
 
   // First pass over fabs to fill sparse per cut-cell ebg structures
   sv_eb_bndry_geom.resize(vfrac.local_size());
@@ -821,7 +826,18 @@ initialize_EB2(
 #else
     amrex::Abort("sco2-combustor geom_type not supported");
 #endif
-  } else {
+  }
+  else if (geom_type == "cylinder_mach2") {
+
+    amrex::EB2::CylinderIF cylinder(0.5, 10, 2, {2.5, 2.5, 0}, false);
+
+    auto polys = amrex::EB2::makeUnion(cylinder);
+    auto gshop = amrex::EB2::makeShop(polys);
+    amrex::EB2::Build(
+      gshop, geom, max_coarsening_level, max_coarsening_level, 4, false);
+  }
+
+ else {
     amrex::EB2::Build(geom, max_level, max_level);
   }
 }
